@@ -1,0 +1,330 @@
+﻿generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ AUTENTICACIÓN Y AUTORIZACIÓN ============
+
+model Usuario {
+  id_usuario       Int      @id @default(autoincrement())
+  correo           String   @unique
+  contrasena_hash  String
+  nombres          String
+  apellidos         String
+  telefono         String?
+  estado           String   @default("Activo")
+  ultimo_acceso    DateTime?
+  fecha_creacion   DateTime @default(now())
+  fecha_actualizacion DateTime @updatedAt
+
+  id_rol           Int
+  rol              Rol      @relation(fields: [id_rol], references: [id_rol])
+
+  @@map("usuarios")
+}
+
+model Rol {
+  id_rol           Int      @id @default(autoincrement())
+  nombre_rol       String   @unique
+  descripcion      String?
+  estado           String   @default("Activo")
+  permisos         String   // JSON string con permisos
+  fecha_creacion   DateTime @default(now())
+  fecha_actualizacion DateTime @updatedAt
+
+  usuarios         Usuario[]
+  clientes         Cliente[]
+
+  @@map("roles")
+}
+
+// ============ CATÁLOGO ============
+
+model Categoria {
+  id_categoria     Int      @id @default(autoincrement())
+  nombre_categoria String   @unique
+  descripcion      String?
+  estado           String   @default("Activo")
+  fecha_creacion   DateTime @default(now())
+
+  productos        Producto[]
+
+  @@map("categorias")
+}
+
+model Color {
+  id_color         Int      @id @default(autoincrement())
+  nombre_color     String   @unique
+  codigo_hex       String
+  codigos_hex      String?  // JSON array para multicolor
+  es_multicolor    Boolean  @default(false)
+  estado           String   @default("Activo")
+
+  variantes        Variante[]
+
+  @@map("colores")
+}
+
+model Talla {
+  id_talla         Int      @id @default(autoincrement())
+  nombre_talla     String   @unique
+  descripcion      String?
+
+  variantes        Variante[]
+
+  @@map("tallas")
+}
+
+model Producto {
+  id_producto      Int      @id @default(autoincrement())
+  id_categoria     Int
+  referencia       String   @unique
+  nombre_producto  String
+  descripcion      String?
+  genero           String?  // "Mujer" | "Hombre"
+  imagen_url       String?
+  imagenes_urls    String?  // JSON array
+  imagen_principal Int      @default(0)
+  estado           String   @default("Activo")
+  fecha_creacion   DateTime @default(now())
+
+  categoria        Categoria @relation(fields: [id_categoria], references: [id_categoria])
+  variantes        Variante[]
+
+  @@map("productos")
+}
+
+model Variante {
+  id_variante      Int      @id @default(autoincrement())
+  id_producto      Int
+  id_talla         Int
+  id_color         Int
+  precio_venta     Float
+  stock_actual     Int      @default(0)
+  stock_minimo     Int      @default(0)
+  stock_maximo     Int      @default(0)
+  estado           String   @default("Activo")
+  motivo_baja      String?
+  fecha_baja       DateTime?
+
+  producto         Producto @relation(fields: [id_producto], references: [id_producto])
+  talla            Talla    @relation(fields: [id_talla], references: [id_talla])
+  color            Color    @relation(fields: [id_color], references: [id_color])
+
+  detalleVentas    DetalleVenta[]
+  detalleCompras   DetalleCompra[]
+  detalleDevoluciones DetalleDevolucion[]
+  detallePlanesSepare DetallePlanSepare[]
+
+  @@unique([id_producto, id_talla, id_color])
+  @@map("variantes")
+}
+
+// ============ CLIENTES ============
+
+model Cliente {
+  id_cliente       Int      @id @default(autoincrement())
+  id_rol           Int      @default(2) // 2 = Cliente
+  tipo_documento   String   @default("CC")
+  identificacion   String   @unique
+  nombres          String
+  apellidos        String
+  telefono         String
+  correo           String   @unique
+  direccion        String?
+  contrasena_hash  String?
+  estado           String   @default("Activo")
+  fecha_creacion   DateTime @default(now())
+
+  rol              Rol?     @relation(fields: [id_rol], references: [id_rol])
+  ventas           Venta[]
+  devoluciones     Devolucion[]
+  planesSepare     PlanSepare[]
+
+  @@map("clientes")
+}
+
+// ============ PROVEEDORES ============
+
+model Proveedor {
+  id_proveedor     Int      @id @default(autoincrement())
+  nit              String   @unique
+  razon_social     String
+  contacto         String?
+  contacto_telefono String?
+  contacto_correo  String?
+  telefono         String
+  correo           String
+  direccion        String?
+  estado           String   @default("Activo")
+
+  compras          Compra[]
+
+  @@map("proveedores")
+}
+
+// ============ VENTAS ============
+
+model Venta {
+  id_venta         Int      @id @default(autoincrement())
+  id_cliente       Int
+  fecha_venta      DateTime @default(now())
+  metodo_pago      String
+  subtotal         Float
+  descuento        Float    @default(0)
+  total_venta      Float
+  estado           String   @default("COMPLETADA")
+  origen           String   @default("ADMIN") // "ADMIN" | "TIENDA_ONLINE"
+  comprobante      String?
+  comprobante_nombre String?
+
+  cliente          Cliente   @relation(fields: [id_cliente], references: [id_cliente])
+  detalles         DetalleVenta[]
+  devoluciones     Devolucion[]
+
+  @@map("ventas")
+}
+
+model DetalleVenta {
+  id_detalle_venta Int      @id @default(autoincrement())
+  id_venta         Int
+  id_variante      Int
+  cantidad         Int
+  precio_unitario  Float
+  subtotal         Float
+
+  venta            Venta    @relation(fields: [id_venta], references: [id_venta], onDelete: Cascade)
+  variante         Variante @relation(fields: [id_variante], references: [id_variante])
+
+  @@map("detalle_ventas")
+}
+
+// ============ COMPRAS ============
+
+model Compra {
+  id_compra        Int      @id @default(autoincrement())
+  id_proveedor     Int
+  fecha_compra     DateTime @default(now())
+  fecha_registro   DateTime @default(now())
+  numero_factura_proveedor String
+  iva              Float    @default(19)
+  tipo_pago        String   @default("Contado")
+  estado           String   @default("Activa")
+
+  proveedor        Proveedor @relation(fields: [id_proveedor], references: [id_proveedor])
+  detalles         DetalleCompra[]
+
+  @@map("compras")
+}
+
+model DetalleCompra {
+  id_detalle_compra Int     @id @default(autoincrement())
+  id_compra        Int
+  id_variante      Int
+  cantidad         Int
+  costo_unitario  Float
+
+  compra           Compra   @relation(fields: [id_compra], references: [id_compra], onDelete: Cascade)
+  variante         Variante @relation(fields: [id_variante], references: [id_variante])
+
+  @@map("detalle_compras")
+}
+
+// ============ DEVOLUCIONES ============
+
+model Devolucion {
+  id_devolucion    Int      @id @default(autoincrement())
+  id_venta         Int
+  id_cliente       Int
+  fecha_devolucion DateTime @default(now())
+  fecha_garantia   DateTime?
+  motivo           String
+  tipo_respuesta   String
+  estado           String   @default("PENDIENTE")
+  fecha_estado     DateTime?
+
+  venta            Venta    @relation(fields: [id_venta], references: [id_venta])
+  cliente          Cliente   @relation(fields: [id_cliente], references: [id_cliente])
+  detalles         DetalleDevolucion[]
+
+  @@map("devoluciones")
+}
+
+model DetalleDevolucion {
+  id_detalle_devolucion Int @id @default(autoincrement())
+  id_devolucion    Int
+  id_variante      Int
+  cantidad         Int
+  defectuoso       Boolean  @default(false)
+
+  devolucion       Devolucion @relation(fields: [id_devolucion], references: [id_devolucion], onDelete: Cascade)
+  variante         Variante @relation(fields: [id_variante], references: [id_variante])
+
+  @@map("detalle_devoluciones")
+}
+
+// ============ PÉRDIDAS ============
+
+model Perdida {
+  id_perdida       Int      @id @default(autoincrement())
+  id_devolucion    Int
+  id_variante      Int
+  cantidad         Int
+  motivo           String
+  descripcion      String?
+  estado           String   @default("REGISTRADA")
+  fecha_registro   DateTime @default(now())
+  fecha_estado     DateTime?
+
+  devolucion       Devolucion @relation(fields: [id_devolucion], references: [id_devolucion])
+  variante         Variante   @relation(fields: [id_variante], references: [id_variante])
+
+  @@map("perdidas")
+}
+
+// ============ PLAN SEPARE ============
+
+model PlanSepare {
+  id_plan_separe   Int      @id @default(autoincrement())
+  id_cliente       Int
+  fecha_inicio     DateTime @default(now())
+  fecha_vencimiento DateTime
+  estado           String   @default("ACTIVO")
+  fecha_estado     DateTime?
+
+  cliente          Cliente   @relation(fields: [id_cliente], references: [id_cliente])
+  detalles         DetallePlanSepare[]
+  abonos           AbonoSepare[]
+
+  @@map("planes_separe")
+}
+
+model DetallePlanSepare {
+  id_detalle_plan  Int      @id @default(autoincrement())
+  id_plan_separe   Int
+  id_variante      Int
+  cantidad         Int
+  precio_unitario  Float
+
+  planSepare       PlanSepare @relation(fields: [id_plan_separe], references: [id_plan_separe], onDelete: Cascade)
+  variante         Variante @relation(fields: [id_variante], references: [id_variante])
+
+  @@map("detalle_planes_separe")
+}
+
+model AbonoSepare {
+  id_abono         Int      @id @default(autoincrement())
+  id_plan_separe   Int
+  fecha_abono      DateTime @default(now())
+  valor_abono      Float
+  metodo_pago      String
+  observacion      String?
+
+  planSepare       PlanSepare @relation(fields: [id_plan_separe], references: [id_plan_separe], onDelete: Cascade)
+
+  @@map("abonos_separe")
+}
